@@ -3,9 +3,9 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-NUM_EPISODES = 20
+NUM_EPISODES = 200
 EPISODE_LENGTH = 200
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-1
 
 # creates window for graphics
 env = gym.make('CartPole-v0')
@@ -35,8 +35,8 @@ def forwardPass(obs):
   
 def main():
   # Set learning parameters
-  y = .99
-  ee = 0.1
+  y = .9
+  ee = 0.05
   tList = []
   rList = []
   
@@ -46,12 +46,17 @@ def main():
     observation = tf.placeholder(dtype=tf.float32, shape=[4])
     e = tf.placeholder(dtype=tf.float32, shape=[])
     old_Q = forwardPass(observation)
-    predicted_action = tf.argmax(old_Q,1)
+    pred_a = tf.argmax(old_Q,1)
     
-    [new_obs, reward, done] = tf.py_func(step, [e, predicted_action[0]], [tf.float32, tf.float32, tf.bool], name='step')
+    [new_obs, reward, done] = tf.py_func(step, [e, pred_a[0]], [tf.float32, tf.float32, tf.bool], name='step')
     
+    target_Q = old_Q
     new_Q = forwardPass(new_obs)
-    loss = tf.square(reward + tf.multiply(y,tf.reduce_max(new_Q)) - tf.gather(old_Q, tf.argmax(new_Q)))
+    tf.cond(done, lambda: tf.assign(tf.gather(target_Q, pred_a[0]), -100),    \
+                  lambda: tf.assign(tf.gather(target_Q, pred_a[0]),           \
+                      tf.add(tf.multiply(y, tf.reduce_max(new_Q)), reward))
+    
+    loss = tf.reduce_sum(tf.square(target_Q - old_Q))
     #Below we obtain the loss by taking the sum of squares difference between the target and prediction Q values.
     optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(loss)
     
