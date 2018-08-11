@@ -3,9 +3,10 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-NUM_EPISODES = 20
+NUM_EPISODES = 1000
 EPISODE_LENGTH = 200
-LEARNING_RATE = 1e-3
+LEARNING_RATE = .01
+DISPLAY_EVERY = 50
 
 # creates window for graphics
 env = gym.make('CartPole-v0')
@@ -21,9 +22,9 @@ def step(e, action):
   return [new_obs, np.array([reward], dtype=np.float32), done]
 
 def forwardPass(obs):
-  W1 = tf.Variable(tf.random_normal(shape=[4,10]))
-  B1 = tf.Variable(tf.random_normal(shape=[10]))
-  W2 = tf.Variable(tf.random_normal(shape=[10,2]))
+  W1 = tf.Variable(tf.random_normal(shape=[4,20]))
+  B1 = tf.Variable(tf.random_normal(shape=[20]))
+  W2 = tf.Variable(tf.random_normal(shape=[20,2]))
   B2 = tf.Variable(tf.random_normal(shape=[2]))
   
   H1 = tf.add(tf.matmul(tf.expand_dims(obs,0),W1), B1)
@@ -35,8 +36,8 @@ def forwardPass(obs):
   
 def main():
   # Set learning parameters
-  y = .99
-  ee = 0.1
+  y = 1.0
+  ee = .1
   tList = []
   rList = []
   
@@ -46,13 +47,15 @@ def main():
     observation = tf.placeholder(dtype=tf.float32, shape=[4])
     e = tf.placeholder(dtype=tf.float32, shape=[])
     old_Q = forwardPass(observation)
-    predicted_action = tf.argmax(old_Q,1)
+    pred_a = tf.argmax(old_Q,1)
     
-    [new_obs, reward, done] = tf.py_func(step, [e, predicted_action[0]], [tf.float32, tf.float32, tf.bool], name='step')
+    [new_obs, reward, done] = tf.py_func(step, [e, pred_a[0]], [tf.float32, tf.float32, tf.bool], name='step')
     
     new_Q = forwardPass(new_obs)
-    loss = tf.square(reward + tf.multiply(y,tf.reduce_max(new_Q)) - tf.gather(old_Q, tf.argmax(new_Q)))
-    #Below we obtain the loss by taking the sum of squares difference between the target and prediction Q values.
+    target = tf.cond(done, lambda: -10.0, \
+                           lambda: tf.add(tf.multiply(y, tf.reduce_max(new_Q)), reward))
+    old = tf.reduce_max(old_Q)
+    loss = tf.square(target - old)
     optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(loss)
     
   with tf.Session(graph=graph) as sess:
@@ -76,12 +79,13 @@ def main():
         
         # reduce chance of choosing random action as training progresses
         if don == True:
-          ee = 1./((episode/200) + 10)
+          ee = max(0.01, 1./(episode/50 + 10))
           tList.append(t)
           rList.append(rAll)
           break
-    
-    print("Percent of succesful episodes: " + str(sum(rList)/NUM_EPISODES) + "%")
+      
+      if not episode % DISPLAY_EVERY:
+        print("Episode: %d     Loss: %.3f     Length: %d" % (episode, loss_val, tList[episode]))
   
   #import pdb; pdb.set_trace()
   plt.figure(1)
